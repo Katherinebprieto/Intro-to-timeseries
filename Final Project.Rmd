@@ -1,0 +1,159 @@
+---
+title: "Forecasting Stock using Arima Model"
+author: "Shikha Binani, Kaitlyn Kissner, Katherine Prieto"
+date: "10/16/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Forecasting Stock Using ARIMA model
+
+Throughout the report we will be exploring stock price forcasting using Autoregressive Integrated Moving Average (ARIMA) in R using stock pricing data available through Yahoo Finance from 3 major online travel tech companies, Airbnb, Expedia, and Booking Holdings. This report aims to help investors in the decision making process of whether or not online travel tech companies are worth the investment opportunity. 
+
+The data we will be using is found through Yahoo Finance and we will import data from Airbnb, Expedia, and Booking Holdings using the Quantmod package in R. The data consists of Open, High, Low, and Close, but we will condense down the data to only use closing price. The imported data will be from January 2011 to October 2021. 
+
+
+```{r include=FALSE}
+# If you need to install quantmod on your system use -- install.packages('quantmod')
+library(quantmod)
+
+# Importing the data
+abnb_data <- getSymbols(Symbols = "ABNB", src = "yahoo", from = "2016-01-01", auto.assign = FALSE)
+expe_data <- getSymbols(Symbols = "EXPE", src = "yahoo", from = "2016-01-01", auto.assign = FALSE)
+bkng_data <- getSymbols(Symbols = "BKNG", src = "yahoo", from = "2016-01-01", auto.assign = FALSE)
+
+abnb_data <- Cl(abnb_data)
+expe_data <- Cl(expe_data)
+bkng_data <- Cl(bkng_data)
+```
+
+### Stock Charting
+
+
+
+```{r pressure, echo=FALSE}
+library(fpp2)
+# Creating plots for our data
+a1 <- autoplot(abnb_data) + ylab("Price") + xlab("Day") + ggtitle("Airbnb")
+a2 <- autoplot(expe_data) + ylab("Price") + xlab("Day") + ggtitle("Expedia")
+a3 <- autoplot(bkng_data) + ylab("Price") + xlab("Day") + ggtitle("Booking Holding")
+gridExtra::grid.arrange(a1,a2, a3)
+```
+In the charting above, we plot Airbnb, Expedia, and Booking Holdings across a timeline from January 2011 to current day.  We can see that in our data all three graphs are non stationary, across time we see positive and negative trends, as well as seasonality. Before conducting any time series analysis we will begin to correct for seasonality and trends by taking the log transormation and taking a lag price differential. 
+```{r include=FALSE}
+
+# Correcting for variances
+abnb_log <- log(abnb_data)
+head(abnb_log, n = 10)
+
+expe_log <- log(expe_data)
+head(expe_log, n = 10)
+
+bkng_log <- log(bkng_data)
+head(bkng_log, n = 10)
+
+# New plots
+autoplot(abnb_log)
+autoplot(expe_log)
+autoplot(bkng_log)
+```
+```{r echo=FALSE}
+# Log transformation graph for correcting variability/scaling down unit to growth rates
+b1 <- autoplot(abnb_log, main = "log abnb_log chart")
+b2 <- autoplot(expe_log, main = "log expe_log chart")
+b3 <- autoplot(bkng_log, main = "log bkng_log chart")
+
+gridExtra::grid.arrange(b1, b2, b3)
+```
+
+```{r pressure, include=FALSE}
+ndiffs(abnb_log)
+ndiffs(expe_log)
+ndiffs(bkng_log)
+```
+```{r pressure, echo=FALSE}
+abnb_diff <- diff(abnb_log, lag = 1)
+expe_diff <- diff(expe_log, lag = 1)
+bkng_diff <- diff(bkng_log, lag = 1)
+
+c1 <- autoplot(abnb_diff, main = "Airbnb lag chart")
+c2 <- autoplot(expe_diff, main = "Expedia lag chart")
+c3 <- autoplot(bkng_diff, main = "Booking Holding lag chart")
+
+gridExtra::grid.arrange(c1, c2, c3)
+
+```
+
+```{r include=FALSE}
+# unit root test
+abnb_diff %>% ur.kpss() %>% summary()
+expe_diff %>% ur.kpss() %>% summary()
+bkng_diff %>% ur.kpss() %>% summary()
+# Airbnb needs additional modifications as we can see that our t statistic ~0.10; We will take an additional lag to correct for 
+# abnb_diff1 <- diff(abnb_diff, lag = 12) # come back to this value
+# abnb_diff1 %>% ur.kpss() %>% summary()
+
+#autoplot(abnb_diff1)
+
+```
+
+```{r pressure, include=FALSE}
+length(abnb_diff)
+length(expe_diff)
+length(bkng_diff)
+```
+```{r pressure, include=FALSE}
+# install.packages('caTools')
+library(caTools)
+train_data <- abnb_diff[1:215]
+train_data1 <- expe_diff[1:1459]
+train_data2 <- bkng_diff[1:1459]
+```
+
+```{r pressure, include=FALSE}
+library(forecast)
+set.seed(1)
+arima_model <- auto.arima(train_data, stepwise=FALSE, approximation=FALSE, ic = c("aicc", "aic", "bic"), 
+                          trace = TRUE)
+arima_model1 <- auto.arima(train_data1, stepwise=FALSE, approximation=FALSE, ic = c("aicc", "aic", "bic"), 
+                          trace = TRUE)
+arima_model2 <- auto.arima(train_data2, stepwise=FALSE, approximation=FALSE, ic = c("aicc", "aic", "bic"), 
+                          trace = TRUE)
+```
+
+```{r pressure, include=FALSE}
+checkresiduals(arima_model)
+checkresiduals(arima_model1)
+checkresiduals(arima_model2)
+```
+
+```{r pressure, include=FALSE}
+fit <- Arima(abnb_log, order=c(0,1,0))
+fit1 <- Arima(expe_log, order=c(3,1,2))
+fit2 <- Arima(bkng_log, order=c(4,1,1))
+
+forecast <- forecast(fit, h = 100)
+forecast1 <- forecast(fit1, h = 100)
+forecast2 <- forecast(fit2, h = 100)
+
+autoplot(forecast)
+autoplot(forecast1)
+autoplot(forecast2)
+
+q1 <- autoplot(forecast) +
+  ylab("") + ggtitle("abnb_log")
+q2 <- autoplot(forecast1) +
+  ylab("") + ggtitle("expe_log")
+q3 <- autoplot(forecast2) +
+  ylab("") + ggtitle("bkng_log")
+gridExtra::grid.arrange(q1,q2,q3, nrow=1)
+```
+
+
+
+
+
+
